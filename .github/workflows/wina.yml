@@ -1,4 +1,4 @@
-name: 🖥️ Windows ARM 11 RDP
+name: 🖥️ Windows ARM RDP with Tailscale
 
 on:
   workflow_dispatch:
@@ -20,17 +20,14 @@ jobs:
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1 -Force
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SecurityLayer" -Value 2 -Force
 
-          # Aktifkan Themes untuk wallpaper
           Set-Service -Name Themes -StartupType Automatic -ErrorAction SilentlyContinue
           Start-Service -Name Themes -ErrorAction SilentlyContinue
 
-          # Bypass wallpaper block
           $tsPoliciesPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
           if (!(Test-Path $tsPoliciesPath)) { New-Item -Path $tsPoliciesPath -Force }
           Set-ItemProperty -Path $tsPoliciesPath -Name "fNoRemoteDesktopWallpaper" -Value 0 -Force
           Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "fNoRemoteDesktopWallpaper" -Value 0 -Force
 
-          # Firewall
           Remove-NetFirewallRule -DisplayName "RDP-Tailscale" -ErrorAction SilentlyContinue
           New-NetFirewallRule -DisplayName "RDP-Tailscale" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 3389
 
@@ -74,18 +71,15 @@ jobs:
           
           Invoke-WebRequest -Uri $imageUrl -OutFile $imagePath -UseBasicParsing
           
-          # Registry Global
           $policyPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
           if (!(Test-Path $policyPath)) { New-Item -Path $policyPath -Force }
           Set-ItemProperty -Path $policyPath -Name "Wallpaper" -Value $imagePath -Force
           Set-ItemProperty -Path $policyPath -Name "WallpaperStyle" -Value "2" -Force
           
-          # Lock Screen
           $persPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Personalization"
           if (!(Test-Path $persPath)) { New-Item -Path $persPath -Force }
           Set-ItemProperty -Path $persPath -Name "LockScreenImage" -Value $imagePath -Force
           
-          # Profile Picture
           $userPicDir = "C:\ProgramData\Microsoft\User Account Pictures"
           Copy-Item -Path $imagePath -Destination "$userPicDir\user.png" -Force
           Copy-Item -Path $imagePath -Destination "$userPicDir\user.jpg" -Force
@@ -186,7 +180,7 @@ jobs:
           echo "::endgroup::"
 
       # ============================================================
-      # STEP 7: AUTHENTIKASI TAILSCALE (WEB LOGIN) - MODERN & RAPI
+      # STEP 7: AUTHENTIKASI TAILSCALE (WEB LOGIN) - DIPERBAIKI
       # ============================================================
       - name: 🔗 Tailscale Web Login Authentication
         run: |
@@ -196,52 +190,42 @@ jobs:
           Write-Host "║           🔐 TAILSCALE WEB LOGIN AUTHENTICATION            ║" -ForegroundColor Cyan
           Write-Host "╚════════════════════════════════════════════════════════════╝" -ForegroundColor Cyan
           
-          $tsPath = "$env:ProgramFiles\Tailscale\tailscale.exe"
+          # Cari tailscale.exe di lokasi umum
+          $possiblePaths = @(
+              "$env:ProgramFiles\Tailscale\tailscale.exe",
+              "$env:ProgramFiles(x86)\Tailscale\tailscale.exe"
+          )
+          $tsPath = $null
+          foreach ($p in $possiblePaths) {
+              if (Test-Path $p) {
+                  $tsPath = $p
+                  break
+              }
+          }
+          if (-not $tsPath) {
+              echo "::error::Tailscale tidak ditemukan! Installasi mungkin gagal."
+              exit 1
+          }
+          Write-Host "✅ Tailscale ditemukan di: $tsPath" -ForegroundColor Green
+
           $hostname = "rdp-arm-${{ github.run_number }}"
-          
           Write-Host "🚀 Hostname : $hostname" -ForegroundColor Yellow
-          Write-Host "⏳ Menunggu link login... (proses ini butuh waktu)" -ForegroundColor Yellow
-          Write-Host "────────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
+          Write-Host "⏳ Menjalankan 'tailscale up' ..." -ForegroundColor Yellow
           
-          $psi = New-Object System.Diagnostics.ProcessStartInfo
-          $psi.FileName = $tsPath
-          $psi.Arguments = "up --hostname=$hostname --accept-dns=false"
-          $psi.RedirectStandardOutput = $true
-          $psi.RedirectStandardError = $true
-          $psi.UseShellExecute = $false
-          $psi.CreateNoWindow = $true
+          # Jalankan dan tangkap semua output ke file
+          $outputFile = "$env:TEMP\tailscale_output.txt"
+          & $tsPath up --hostname=$hostname --accept-dns=false *>&1 | Tee-Object -FilePath $outputFile
           
-          $proc = New-Object System.Diagnostics.Process
-          $proc.StartInfo = $psi
-          $proc.Start() | Out-Null
+          # Baca seluruh output
+          $content = Get-Content $outputFile -Raw -ErrorAction SilentlyContinue
+          Remove-Item $outputFile -Force -ErrorAction SilentlyContinue
           
+          # Cari link login
           $link = $null
-          $found = $false
-          
-          # Baca output Tailscale secara real-time
-          while (-not $proc.HasExited) {
-              $lineErr = $proc.StandardError.ReadLine()
-              if ($lineErr -ne $null) {
-                  Write-Host "[tailscale] $lineErr" -ForegroundColor Gray
-                  if ($lineErr -match "https://login.tailscale.com/[a-zA-Z0-9?=./]+") {
-                      $link = $matches[0]
-                      $found = $true
-                  }
-              }
-              $lineOut = $proc.StandardOutput.ReadLine()
-              if ($lineOut -ne $null) {
-                  Write-Host "[tailscale] $lineOut" -ForegroundColor Gray
-                  if ($lineOut -match "https://login.tailscale.com/[a-zA-Z0-9?=./]+") {
-                      $link = $matches[0]
-                      $found = $true
-                  }
-              }
-              
-              if ($found) { break }
-              Start-Sleep -Milliseconds 150
+          if ($content -match "https://login.tailscale.com/[a-zA-Z0-9?=./]+") {
+              $link = $matches[0]
           }
           
-          # Tampilkan Link dengan Box Rapi
           if ($link) {
               Write-Host "`n"
               Write-Host "╔══════════════════════════════════════════════════════════════════╗" -ForegroundColor Green
@@ -251,26 +235,26 @@ jobs:
               Write-Host "╚══════════════════════════════════════════════════════════════════╝" -ForegroundColor Green
               Write-Host "`n"
           } else {
-              echo "::warning::Gagal menangkap link otomatis, cek log di atas"
+              echo "::warning::Link tidak ditemukan secara otomatis. Cari sendiri di output di bawah."
+              Write-Host "─── Output lengkap Tailscale ───" -ForegroundColor Yellow
+              Write-Host $content
+              Write-Host "────────────────────────────────" -ForegroundColor Yellow
           }
           
-          Write-Host "⏳ Menunggu Anda selesai login di browser..." -ForegroundColor Yellow
-          Write-Host "🔄 Memeriksa koneksi (maksimal 3 menit): " -NoNewline -ForegroundColor Yellow
+          Write-Host "⏳ Menunggu Anda selesai login di browser (maks 3 menit)..." -ForegroundColor Yellow
+          Write-Host "🔄 Memeriksa koneksi: " -NoNewline -ForegroundColor Yellow
           
           $tsIP = $null
-          $retries = 0
-          while (-not $tsIP -and $retries -lt 36) {
+          for ($i=0; $i -lt 36; $i++) {
               $tsIP = & $tsPath ip -4 2>$null
-              if (-not $tsIP) {
-                  $retries++
-                  Write-Host "." -NoNewline -ForegroundColor Gray
-                  Start-Sleep -Seconds 5
-              }
+              if ($tsIP) { break }
+              Write-Host "." -NoNewline -ForegroundColor Gray
+              Start-Sleep -Seconds 5
           }
           Write-Host "" # newline
           
           if (-not $tsIP) {
-              echo "::error::⏰ Waktu login habis. Silakan coba lagi."
+              echo "::error::⏰ Waktu login habis. Coba login manual menggunakan link di atas (jika ada)."
               exit 1
           }
           
@@ -321,7 +305,6 @@ jobs:
           echo "::notice::Server berjalan di $ip dengan user Redzz"
           echo "::endgroup::"
 
-          # Loop menjaga runner tetap hidup
           while ($true) {
               Write-Host "[$(Get-Date -Format 'HH:mm:ss')] 🟢 Runner tetap aktif..." -ForegroundColor DarkGray
               Start-Sleep -Seconds 180
