@@ -1,0 +1,40 @@
+name: Windows RDP Tailscale Web Auth
+
+on: workflow_dispatch
+
+jobs:
+  rdp:
+    runs-on: windows-latest
+    steps:
+      - name: Mengaktifkan Remote Desktop (RDP)
+        run: |
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
+
+      - name: Membuat Akun Pengguna RDP
+        run: |
+          net user Administrator "P@ssw0Rd!" /add
+          net localgroup Administrators Administrator /add
+
+      - name: Menginstal Tailscale
+        run: |
+          choco install tailscale -y
+
+      - name: Menghubungkan Tailscale (Autentikasi Web)
+        run: |
+          echo "=========================================================================================="
+          echo "TUNGGU BEBERAPA DETIK, LALU KLIK TAUTAN LOGIN TAILSCALE DI BAWAH UNTUK OTORISASI WEB"
+          echo "=========================================================================================="
+          & "C:\Program Files\Tailscale\tailscale.exe" up
+
+      - name: Menampilkan IP RDP
+        run: |
+          & "C:\Program Files\Tailscale\tailscale.exe" ip -4
+
+      - name: Menjaga Runner Tetap Aktif
+        run: |
+          $loop = $true
+          while ($loop) {
+            Start-Sleep -Seconds 60
+          }
