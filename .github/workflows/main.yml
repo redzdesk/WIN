@@ -1,0 +1,140 @@
+name: Ubuntu Server CI (VPS Mode via bore.pub)
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360   # Maks 6 jam (batas GitHub Actions)
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Show Ubuntu version
+        run: |
+          echo "=== Ubuntu Version ==="
+          lsb_release -a
+          echo "=== Kernel Info ==="
+          uname -a
+
+      - name: Update package list
+        run: sudo apt-get update
+
+      - name: Install tools (neofetch, sudo, nano, htop, openssh-server)
+        run: sudo apt-get install -y neofetch sudo nano htop openssh-server
+
+      - name: Show system info
+        run: neofetch --stdout
+
+      - name: Set hostname to cloudvpss
+        run: |
+          echo "Mengatur hostname ke cloudvpss..."
+          sudo hostnamectl set-hostname cloudvpss
+          
+          # Update /etc/hosts agar hostname baru dikenali
+          sudo sed -i "s/127.0.1.1.*/127.0.1.1 cloudvpss/" /etc/hosts
+          
+          # Jika baris 127.0.1.1 belum ada, tambahkan
+          if ! grep -q "127.0.1.1" /etc/hosts; then
+            echo "127.0.1.1 cloudvpss" | sudo tee -a /etc/hosts
+          fi
+          
+          echo "✅ Hostname berhasil diubah menjadi: $(hostname)"
+
+      - name: Change root password to "redz"
+        run: |
+          echo "Mengganti password root..."
+          echo "root:redz" | sudo chpasswd
+          echo "✅ Password root berhasil diganti menjadi 'redz'"
+
+      - name: Configure SSH server
+        run: |
+          echo "Mengkonfigurasi SSH server..."
+          sudo sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+          sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
+          sudo systemctl restart ssh
+          echo "✅ SSH server dikonfigurasi dan direstart"
+          sudo systemctl status ssh --no-pager
+
+      - name: Install bore (expose local port to internet)
+        run: |
+          echo "Menginstall bore..."
+          # Download binary bore dari GitHub releases
+          curl -fsSL https://github.com/ekzhang/bore/releases/download/v0.5.2/bore-v0.5.2-x86_64-unknown-linux-musl.tar.gz -o bore.tar.gz
+          tar xzf bore.tar.gz
+          sudo mv bore /usr/local/bin/bore
+          sudo chmod +x /usr/local/bin/bore
+          echo "✅ bore terinstall"
+
+      - name: Expose SSH port via bore.pub
+        run: |
+          echo "Menjalankan bore untuk meneruskan port 22 ke bore.pub..."
+          # Jalankan bore di background, simpan output ke file
+          nohup bore local 22 --to bore.pub > /tmp/bore.log 2>&1 &
+          BORE_PID=$!
+          echo "Bore PID: $BORE_PID"
+
+          # Tunggu sebentar agar bore mendapatkan alamat remote
+          sleep 5
+
+          # Cek apakah bore masih berjalan
+          if ! kill -0 $BORE_PID 2>/dev/null; then
+            echo "❌ Bore gagal berjalan. Log:"
+            cat /tmp/bore.log
+            exit 1
+          fi
+
+          # Ambil informasi remote address dari log
+          # Format output bore: "listening at bore.pub:XXXXX"
+          REMOTE_ADDR=$(grep -oP 'listening at \K[^ ]+' /tmp/bore.log | tail -1)
+          if [ -z "$REMOTE_ADDR" ]; then
+            echo "⚠️  Tidak dapat membaca alamat remote, menunggu lebih lama..."
+            sleep 10
+            REMOTE_ADDR=$(grep -oP 'listening at \K[^ ]+' /tmp/bore.log | tail -1)
+          fi
+
+          if [ -z "$REMOTE_ADDR" ]; then
+            echo "❌ Tidak dapat menemukan alamat remote. Log lengkap:"
+            cat /tmp/bore.log
+            exit 1
+          fi
+
+          echo "========================================="
+          echo "   VPS SEMENTARA SIAP DIGUNAKAN"
+          echo "========================================="
+          echo " Hostname:      cloudvpss"
+          echo " Remote address: ${REMOTE_ADDR}"
+          echo " SSH command:    ssh root@${REMOTE_ADDR}"
+          echo " Password root:  redz"
+          echo "========================================="
+          echo " Server akan aktif hingga workflow timeout (max 6 jam)"
+          echo " Jangan tutup tab ini jika ingin tetap terhubung."
+          echo "========================================="
+
+          # Simpan info koneksi untuk step selanjutnya
+          echo "REMOTE_ADDR=${REMOTE_ADDR}" >> $GITHUB_ENV
+          echo "BORE_PID=${BORE_PID}" >> $GITHUB_ENV
+
+      - name: Keep alive (jangan biarkan job selesai)
+        run: |
+          echo "Menjaga koneksi bore tetap hidup..."
+          echo "VPS dapat diakses di: $REMOTE_ADDR"
+          echo "Hostname: cloudvpss"
+          echo "SSH: ssh root@${REMOTE_ADDR}  (password: redz)"
+          echo "Menunggu hingga timeout (6 jam) atau workflow dibatalkan..."
+          # Loop tak terbatas untuk menjaga job tetap berjalan
+          while true; do
+            # Cek apakah bore masih berjalan
+            if ! kill -0 $BORE_PID 2>/dev/null; then
+              echo "❌ Bore berhenti, memeriksa log:"
+              cat /tmp/bore.log
+              exit 1
+            fi
+            sleep 60
+          done
