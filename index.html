@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WersApp Messenger</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    /* Desain Scrollbar Khas Desktop */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.25); }
+
+    /* Transisi Animasi Panel Samping */
+    .panel-right-enter { transform: translateX(100%); transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1); }
+    .panel-right-active { transform: translateX(0); }
+
+    /* Animasi Halus Balon Chat */
+    .fade-in { animation: fadeIn 0.2s ease-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+</head>
+<body class="bg-[#0a1014] text-[#e9edef] font-sans h-screen w-screen overflow-hidden select-none flex justify-center items-center">
+
+  <!-- Aksen Jalur Hijau di Atas Desktop -->
+  <div class="absolute top-0 left-0 w-full h-[127px] bg-[#00a884] z-0"></div>
+
+  <!-- Jendela Aplikasi Utama -->
+  <div id="desktop-app-container" class="relative z-10 w-full h-full max-w-[1600px] bg-[#111b21] shadow-2xl flex flex-col xl:my-4 xl:h-[calc(100vh-2rem)] xl:rounded-sm overflow-hidden">
+
+    <!-- ================= LAYAR LOGIN / VERIFIKASI ================= -->
+    <div id="login-screen" class="absolute inset-0 bg-[#111b21] z-50 flex flex-col items-center justify-center p-4">
+      <div class="w-full max-w-md bg-[#222e35] rounded-xl p-8 shadow-2xl border border-gray-800 text-center relative overflow-hidden">
+        <div class="flex justify-center mb-4">
+          <div class="w-20 h-20 bg-gradient-to-br from-[#00a884] to-[#008f72] rounded-xl flex items-center justify-center shadow-lg">
+            <i data-lucide="message-square" class="w-10 h-10 text-white"></i>
+          </div>
+        </div>
+        <h1 class="text-2xl font-bold text-white mb-2">WersApp</h1>
+        <p class="text-sm text-[#8696a0] mb-6">Nikmati pengalaman komunikasi awan terpusat</p>
+
+        <!-- Toggle Mode Login -->
+        <div class="flex bg-[#111b21] p-1 rounded-lg mb-6 max-w-xs mx-auto">
+          <button id="tab-register" onclick="toggleLoginMode('register')" class="flex-1 text-xs py-2 rounded-md font-bold text-[#00a884] bg-[#222e35] transition-all">Daftar Baru</button>
+          <button id="tab-login" onclick="toggleLoginMode('login')" class="flex-1 text-xs py-2 rounded-md font-bold text-[#8696a0] transition-all">Masuk Nomor Lama</button>
+        </div>
+
+        <!-- Form Registrasi Akun Baru -->
+        <div id="form-register" class="space-y-4 text-left max-w-sm mx-auto">
+          <div>
+            <label class="block text-[11px] font-bold text-[#00a884] uppercase tracking-wider mb-2">Nama Pengguna Baru</label>
+            <input type="text" id="reg-name-input" placeholder="Masukkan nama Anda..." class="w-full bg-[#2a3942] focus:outline-none rounded-lg px-4 py-3 text-sm text-white placeholder-[#8696a0]">
+          </div>
+          <button onclick="handleRegister()" class="w-full bg-[#00a884] hover:bg-[#008f72] text-[#111b21] font-bold py-3.5 rounded-lg transition-all flex items-center justify-center gap-2 shadow-lg">
+            <span>Daftar Akun Baru</span>
+            <i data-lucide="user-plus" class="w-5 h-5"></i>
+          </button>
+        </div>
+
+        <!-- Form Masuk Akun Lama -->
+        <div id="form-login" class="space-y-4 text-left max-w-sm mx-auto hidden">
+          <div>
+            <label class="block text-[11px] font-bold text-[#00a884] uppercase tracking-wider mb-2">Nomor WersApp (YN-xxxx)</label>
+            <input type="text" id="login-num-input" placeholder="YN-1234" class="w-full bg-[#2a3942] focus:outline-none rounded-lg px-4 py-3 text-sm text-white placeholder-[#8696a0] uppercase">
+          </div>
+          <div>
+            <label class="block text-[11px] font-bold text-[#00a884] uppercase tracking-wider mb-2">Password Pengaman</label>
+            <input type="password" id="login-pass-input" placeholder="Ketik kata sandi..." class="w-full bg-[#2a3942] focus:outline-none rounded-lg px-4 py-3 text-sm text-white placeholder-[#8696a0]">
+          </div>
+          <button onclick="handleLoginOld()" class="w-full bg-[#00a884] hover:bg-[#008f72] text-[#111b21] font-bold py-3.5 rounded-lg transition-all flex items-center justify-center gap-2 shadow-lg">
+            <span>Masuk ke Akun</span>
+            <i data-lucide="shield-check" class="w-5 h-5"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= LAYAR UTAMA JENDELA DESKTOP ================= -->
+    <div id="app-screen" class="hidden w-full h-full flex overflow-hidden">
+      
+      <!-- === KOLOM 1: SIDEBAR KIRI (CHATS, GROUPS) === -->
+      <div id="sidebar" class="w-[380px] flex-shrink-0 bg-[#111b21] border-r border-[#222d34] flex flex-col h-full z-10">
+        <!-- Header Profil -->
+        <div class="h-[60px] bg-[#202c33] px-4 flex items-center justify-between shrink-0">
+          <div class="flex items-center gap-3 cursor-pointer group" onclick="toggleRightPanel('panel-profile')">
+            <img id="my-avatar-img" src="" class="w-10 h-10 rounded-full object-cover">
+            <div>
+              <h2 id="my-name-display" class="font-semibold text-sm text-[#e9edef] truncate max-w-[140px]">Memuat...</h2>
+              <p id="my-number-display" class="text-xs text-[#8696a0] font-mono">YN-xxxx</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-1">
+            <button onclick="switchTab('chats')" class="p-2 rounded-full bg-[#2a3942]" id="btn-tab-chats" title="Obrolan Pribadi"><i data-lucide="message-square" class="w-5 h-5 text-[#00a884]" id="icon-tab-chats"></i></button>
+            <button onclick="switchTab('groups')" class="p-2 rounded-full hover:bg-[#2a3942]" id="btn-tab-groups" title="Daftar Grup"><i data-lucide="users" class="w-5 h-5 text-[#aebac1]" id="icon-tab-groups"></i></button>
+            <button onclick="toggleRightPanel('panel-add-contact')" class="p-2 rounded-full hover:bg-[#2a3942]" title="Tambah Teman Baru"><i data-lucide="plus-circle" class="w-5 h-5 text-[#aebac1]"></i></button>
+          </div>
+        </div>
+
+        <!-- Kolom Pencarian -->
+        <div class="p-2 bg-[#111b21] border-b border-[#222d34] shrink-0">
+          <div class="relative bg-[#202c33] rounded-lg flex items-center px-3 py-1.5 focus-within:bg-[#2a3942] transition-colors">
+            <i data-lucide="search" class="w-4 h-4 text-[#8696a0] mr-3"></i>
+            <input type="text" id="search-input" oninput="filterLists()" placeholder="Cari obrolan..." class="bg-transparent w-full focus:outline-none text-sm text-[#e9edef]">
+          </div>
+        </div>
+
+        <!-- List Obrolan -->
+        <div class="flex-1 overflow-y-auto relative">
+          <!-- Obrolan Pribadi -->
+          <div id="tab-chats-content" class="block h-full">
+            <div id="chats-list" class="divide-y divide-[#222d34]/40"></div>
+          </div>
+          <!-- Daftar Grup -->
+          <div id="tab-groups-content" class="hidden h-full flex-col">
+            <div class="p-3 flex gap-2 border-b border-[#222d34] shrink-0">
+              <button onclick="toggleRightPanel('panel-create-group')" class="flex-1 bg-[#202c33] text-xs text-[#00a884] py-2 rounded flex justify-center items-center gap-1.5 font-bold"><i data-lucide="plus" class="w-4 h-4"></i> Buat</button>
+              <button onclick="toggleRightPanel('panel-join-group')" class="flex-1 bg-[#202c33] text-xs text-[#00a884] py-2 rounded flex justify-center items-center gap-1.5 font-bold"><i data-lucide="hash" class="w-4 h-4"></i> Gabung</button>
+            </div>
+            <div id="groups-list" class="divide-y divide-[#222d34]/40 flex-1 overflow-y-auto"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- === KOLOM 2: AREA TENGAH CHAT === -->
+      <div id="chat-area" class="flex-1 bg-[#0b141a] flex flex-col h-full relative">
+        <!-- Layar Pembuka Kosong -->
+        <div id="chat-welcome" class="absolute inset-0 bg-[#222e35] flex flex-col items-center justify-center p-8 text-center z-20 border-b-[6px] border-[#00a884]">
+          <div class="max-w-md space-y-4">
+            <div class="w-20 h-20 bg-[#111b21] rounded-full mx-auto flex items-center justify-center text-[#8696a0]"><i data-lucide="message-square-text" class="w-10 h-10"></i></div>
+            <h2 class="text-2xl font-light text-[#e9edef]">WersApp</h2>
+            <p class="text-sm text-[#8696a0] leading-relaxed">Pesan dienkripsi cloud. Kirim dokumen, gambar, atau gunakan pemilih emoji untuk obrolan Anda.</p>
+          </div>
+        </div>
+
+        <!-- Header Room Aktif -->
+        <div class="h-[60px] bg-[#202c33] px-6 flex items-center justify-between shrink-0">
+          <div class="flex items-center gap-4 cursor-pointer" onclick="if(activeChat && activeChat.type === 'group') toggleRightPanel('panel-group-info')">
+            <img id="active-chat-avatar" src="" class="w-10 h-10 rounded-full object-cover hidden">
+            <div id="active-chat-placeholder" class="w-10 h-10 rounded-full bg-[#2a3942] flex items-center justify-center text-[#00a884] hidden"><i data-lucide="users" class="w-5 h-5"></i></div>
+            <div>
+              <h3 id="active-chat-title" class="font-medium text-[15px] text-[#e9edef]">Nama</h3>
+              <p id="active-chat-subtitle" class="text-xs text-[#8696a0] truncate max-w-[300px] mt-[1px]"></p>
+            </div>
+          </div>
+          <button id="btn-group-info" onclick="toggleRightPanel('panel-group-info')" class="hidden text-[#8696a0] hover:text-white"><i data-lucide="panel-right" class="w-5 h-5"></i></button>
+        </div>
+
+        <!-- Panel Daftar Pesan -->
+        <div id="messages-container" class="flex-1 overflow-y-auto p-6 space-y-2" style="background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png'); background-opacity: 0.04;"></div>
+
+        <!-- Input Area, Emoji, Lampiran File -->
+        <div class="bg-[#202c33] px-6 py-3 flex items-center gap-4 shrink-0 relative">
+          
+          <!-- PANEL PEMILIH EMOJI INTERAKTIF -->
+          <button onclick="toggleEmojiPicker()" class="text-[#8696a0] hover:text-white relative"><i data-lucide="smile" class="w-6 h-6"></i></button>
+          <div id="emoji-picker" class="hidden absolute bottom-16 left-6 bg-[#222e35] border border-gray-800 p-3 rounded-lg shadow-2xl z-40 w-64">
+            <div class="grid grid-cols-6 gap-2 text-center text-xl">
+              <span class="cursor-pointer hover:scale-125 transition-transform" onclick="insertEmoji('😀')">😀</span>
+              <span class="cursor-pointer hover:scale-125 transition-transform" onclick="insertEmoji('😂')">😂</span>
+              <span class="cursor-pointer hover:scale-125 transition-transform" onclick="insertEmoji('😍')">😍</span>
+              <span class="cursor-pointer hover:scale-125 transition-transform" onclick="insertEmoji('👍')">👍</span>
+              <span class="cursor-pointer hover:scale-125 transition-transform" onclick="insertEmoji('🔥')">🔥</span>
+              <span class="cursor-pointer hover:scale-125 transition-transform" onclick="insertEmoji('👏')">👏</span>
+              <span class="cursor-pointer hover:scale-125 transition-transform" onclick="insertEmoji('💖')">💖</span>
+              <span class="cursor-pointer hover:scale-125 transition-transform" onclick="insertEmoji('🙏')">🙏</span>
+              <span class="cursor-pointer hover:scale-125 transition-transform" onclick="insertEmoji('🎉')">🎉</span>
+              <span class="cursor-pointer hover:scale-125 transition-transform" onclick="insertEmoji('🤔')">🤔</span>
+              <span class="cursor-pointer hover:scale-125 transition-transform" onclick="insertEmoji('✨')">✨</span>
+              <span class="cursor-pointer hover:scale-125 transition-transform" onclick="insertEmoji('😎')">😎</span>
+            </div>
+          </div>
+
+          <!-- Lampiran File -->
+          <button onclick="document.getElementById('file-input').click()" class="text-[#8696a0] hover:text-white" title="Kirim Berkas / Gambar"><i data-lucide="paperclip" class="w-5 h-5"></i></button>
+          <input type="file" id="file-input" class="hidden" onchange="handleFileUpload(event)">
+
+          <input type="text" id="message-input" onkeydown="handleKeySend(event)" placeholder="Ketik pesan..." class="flex-1 bg-[#2a3942] focus:outline-none rounded-lg px-4 py-2.5 text-sm text-[#e9edef]">
+          <button onclick="sendMessage()" class="text-[#8696a0] hover:text-[#00a884]"><i data-lucide="send-horizonal" class="w-6 h-6"></i></button>
+        </div>
+      </div>
+
+      <!-- === KOLOM 3: PANEL KANAN DESKTOP (DETAIL & METADATA - SPLIT VIEW) === -->
+      <div id="right-panel-container" class="w-[360px] h-full bg-[#111b21] border-l border-[#222d34] flex flex-col shrink-0 panel-right-enter absolute right-0 z-30 shadow-2xl md:static hidden">
+        <div class="h-[60px] bg-[#202c33] px-5 flex items-center gap-4 shrink-0 justify-between">
+          <div class="flex items-center gap-3">
+            <button onclick="closeRightPanel()"><i data-lucide="x" class="w-5 h-5 text-[#aebac1]"></i></button>
+            <h3 id="right-panel-title" class="text-sm font-semibold">Judul</h3>
+          </div>
+        </div>
+        <div class="flex-1 overflow-y-auto">
+          
+          <!-- Panel Profil / Password -->
+          <div id="content-panel-profile" class="hidden p-5 space-y-4">
+            <div class="flex flex-col items-center">
+              <div class="relative w-36 h-36 rounded-full overflow-hidden group border-2 border-[#00a884]">
+                <img id="profile-edit-avatar" src="" class="w-full h-full object-cover">
+                <label class="absolute inset-0 bg-black/60 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 text-xs text-white cursor-pointer transition-opacity">
+                  UBAH FOTO
+                  <input type="file" accept="image/*" class="hidden" onchange="uploadAvatarLocal(event)">
+                </label>
+              </div>
+            </div>
+            <div><label class="text-[11px] font-bold text-[#00a884]">NAMA ANDA</label><input type="text" id="profile-name-input" class="w-full bg-[#202c33] rounded px-3 py-2 text-sm mt-1"></div>
+            <div><label class="text-[11px] font-bold text-gray-500">ID DESKTOP ANDA</label><input type="text" id="profile-number-input" disabled class="w-full bg-[#1c242a] rounded px-3 py-2 text-sm text-gray-400 mt-1 cursor-not-allowed"></div>
+            <div><label class="text-[11px] font-bold text-[#00a884]">BIO STATUS</label><input type="text" id="profile-desc-input" class="w-full bg-[#202c33] rounded px-3 py-2 text-sm mt-1"></div>
+            
+            <!-- Kata Sandi Pengaman Akun -->
+            <div class="bg-[#1c242a] p-3 rounded-lg border border-gray-800 space-y-1.5">
+              <label class="text-[11px] text-[#00a884] font-bold block">KATA SANDI AKUN (PASSWORD)</label>
+              <input type="password" id="profile-password-input" placeholder="Atur password di sini..." class="w-full bg-[#202c33] focus:outline-none rounded px-3 py-2 text-xs text-white">
+            </div>
+
+            <button onclick="saveProfile()" class="w-full bg-[#00a884] text-[#111b21] font-bold py-2.5 rounded-lg flex items-center justify-center gap-1.5"><i data-lucide="save" class="w-4 h-4"></i> Simpan Profil</button>
+            <button onclick="handleLogout()" class="w-full bg-red-600/10 border border-red-600/30 text-red-500 font-bold py-2.5 rounded-lg mt-4">Keluar / Ganti Akun</button>
+          </div>
+
+          <!-- Panel Tambah Kontak Obrolan -->
+          <div id="content-panel-add-contact" class="hidden p-5 space-y-4">
+            <div><label class="text-[11px] text-[#00a884] font-bold">NOMOR ID TUJUAN</label><input type="text" id="contact-number-input" placeholder="YN-xxxx" class="w-full bg-[#202c33] rounded px-3 py-2.5 text-sm uppercase mt-1"></div>
+            <div><label class="text-[11px] text-[#00a884] font-bold">NAMA SIMPANAN</label><input type="text" id="contact-name-input" placeholder="Nama panggilan..." class="w-full bg-[#202c33] rounded px-3 py-2.5 text-sm mt-1"></div>
+            <button onclick="addContactAndOpen()" class="w-full bg-[#00a884] text-[#111b21] font-bold py-2.5 rounded-lg flex justify-center items-center gap-1.5"><i data-lucide="message-circle" class="w-4 h-4"></i> Buka Obrolan</button>
+          </div>
+
+          <!-- Panel Buat Grup -->
+          <div id="content-panel-create-group" class="hidden p-5 space-y-4">
+            <div><label class="text-[11px] text-[#00a884] font-bold">NAMA GRUP BARU</label><input type="text" id="group-name-input" class="w-full bg-[#202c33] rounded px-3 py-2.5 text-sm mt-1"></div>
+            <div><label class="text-[11px] text-[#00a884] font-bold">DESKRIPSI GRUP</label><input type="text" id="group-desc-input" class="w-full bg-[#202c33] rounded px-3 py-2.5 text-sm mt-1"></div>
+            <button onclick="createNewGroup()" class="w-full bg-[#00a884] text-[#111b21] font-bold py-2.5 rounded-lg">Buat Grup</button>
+          </div>
+
+          <!-- Panel Gabung Grup -->
+          <div id="content-panel-join-group" class="hidden p-5 space-y-4">
+            <div><label class="text-[11px] text-[#00a884] font-bold">KODE GRUP (GRP-xxxx)</label><input type="text" id="join-group-code" placeholder="GRP-1234" class="w-full bg-[#202c33] rounded px-3 py-2.5 text-center font-mono uppercase mt-1"></div>
+            <button onclick="joinGroupWithCode()" class="w-full bg-[#00a884] text-[#111b21] font-bold py-2.5 rounded-lg">Masuk Grup</button>
+          </div>
+
+          <!-- Panel Detail & Manajemen Grup -->
+          <div id="content-panel-group-info" class="hidden pb-10">
+            <div class="text-center py-6 border-b border-[#222d34] space-y-1.5">
+              <div class="w-20 h-20 bg-[#202c33] rounded-full mx-auto flex items-center justify-center text-[#00a884] shadow-inner mb-2"><i data-lucide="users" class="w-10 h-10"></i></div>
+              <h4 id="info-group-name" class="text-lg font-bold">Grup</h4>
+              <p id="info-group-desc" class="text-xs text-[#8696a0] px-4"></p>
+              <div class="mt-2"><span id="info-group-code" class="bg-[#2a3942] text-xs text-[#00a884] px-3 py-1 rounded-full font-mono font-bold">GRP-xxxx</span></div>
+            </div>
+            
+            <div id="add-member-section" class="bg-[#111b21] p-4 border-b border-[#222d34] hidden">
+              <label class="text-[11px] font-bold text-[#00a884] block mb-1">TAMBAH ANGGOTA GRUP</label>
+              <div class="flex gap-2">
+                <select id="select-add-member" class="flex-1 bg-[#202c33] text-xs rounded px-2 text-white focus:outline-none"></select>
+                <button onclick="addSelectedMemberToGroup()" class="bg-[#00a884] text-[#111b21] text-xs font-bold px-3 py-1.5 rounded">Tambah</button>
+              </div>
+            </div>
+            
+            <div class="p-4">
+              <h5 class="text-xs font-bold text-gray-500 mb-2">ANGGOTA GRUP</h5>
+              <div id="group-members-list" class="divide-y divide-[#222d34]/40"></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Kontainer Notifikasi Banner Desktop -->
+  <div id="toast-container" class="fixed bottom-6 right-6 z-50 pointer-events-none flex flex-col gap-2.5 items-end"></div>
+
+  <!-- ================= FIREBASE REALTIME DB MODULE ================= -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getDatabase, ref, set, push, onChildAdded, get, update, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+    // Konfigurasi Database WersApp-V2 Anda
+    const firebaseConfig = {
+      apiKey: "AIzaSyAzHbQeFiVY1YdeexJIvJcURfO10_XUneU",
+      authDomain: "wersapp-v2.firebaseapp.com",
+      databaseURL: "https://wersapp-v2-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "wersapp-v2",
+      storageBucket: "wersapp-v2.firebasestorage.app",
+      messagingSenderId: "674067504234",
+      appId: "1:674067504234:web:fcbf64d9c2a96952fabe13"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    let currentUser = null;
+    let mySavedContacts = JSON.parse(localStorage.getItem('wersapp_desktop_contacts')) || {}; 
+    let activeChat = null; 
+    let currentTab = 'chats';
+    let loadedAllUsers = {}; 
+    let appLoadedTime = Date.now();
+    let currentRightPanel = null;
+    let loginMode = 'register';
+
+    window.onload = () => {
+      lucide.createIcons();
+      checkAuthSession();
+    };
+
+    // --- TOGGLE REGISTRASI ATAU LOGIN NOMOR LAMA ---
+    window.toggleLoginMode = (mode) => {
+      loginMode = mode;
+      const rTab = document.getElementById('tab-register');
+      const lTab = document.getElementById('tab-login');
+      const rForm = document.getElementById('form-register');
+      const lForm = document.getElementById('form-login');
+
+      if (mode === 'register') {
+        rTab.classList.add('text-[#00a884]', 'bg-[#222e35]');
+        lTab.classList.remove('text-[#00a884]', 'bg-[#222e35]');
+        rForm.classList.remove('hidden');
+        lForm.classList.add('hidden');
+      } else {
+        lTab.classList.add('text-[#00a884]', 'bg-[#222e35]');
+        rTab.classList.remove('text-[#00a884]', 'bg-[#222e35]');
+        lForm.classList.remove('hidden');
+        rForm.classList.add('hidden');
+      }
+    };
+
+    function checkAuthSession() {
+      const savedNum = localStorage.getItem('wersapp_desktop_session');
+      if (savedNum) {
+        get(ref(db, `users/${savedNum}`)).then((snapshot) => {
+          if (snapshot.exists()) {
+            currentUser = snapshot.val();
+            showMainDashboard();
+          } else {
+            handleLogout();
+          }
+        });
+      }
+    }
+
+    // --- REGISTER AKUN BARU ---
+    window.handleRegister = async () => {
+      const name = document.getElementById('reg-name-input').value.trim();
+      if (!name) return showToast("Silakan masukkan nama!");
+
+      const gNum = 'YN-' + Math.floor(1000 + Math.random() * 9000);
+      const defaultAvatar = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80";
+
+      currentUser = {
+        name,
+        number: gNum,
+        avatar: defaultAvatar,
+        desc: "Mulai memakai WersApp Desktop.",
+        password: ""
+      };
+
+      await set(ref(db, `users/${gNum}`), currentUser);
+      localStorage.setItem('wersapp_desktop_session', gNum);
+      showMainDashboard();
+      showToast(`Pendaftaran Sukses! ID: ${gNum}`);
+    };
+
+    // --- LOGIN AKUN LAMA ---
+    window.handleLoginOld = async () => {
+      const numInput = document.getElementById('login-num-input').value.trim().toUpperCase();
+      const passInput = document.getElementById('login-pass-input').value.trim();
+
+      if(!numInput || !passInput) return showToast("Silahkan isi ID dan Password!");
+
+      const snap = await get(ref(db, `users/${numInput}`));
+      if(!snap.exists()) return showToast("ID tersebut tidak ditemukan.");
+
+      const uData = snap.val();
+      if(!uData.password) {
+        return showToast("Akun lama belum memiliki password. Buat akun baru.");
+      }
+
+      if(uData.password !== passInput) {
+        return showToast("Password salah!");
+      }
+
+      currentUser = uData;
+      localStorage.setItem('wersapp_desktop_session', numInput);
+      showMainDashboard();
+      showToast("Berhasil Masuk Akun!");
+    };
+
+    window.handleLogout = () => {
+      localStorage.removeItem('wersapp_desktop_session');
+      currentUser = null;
+      activeChat = null;
+      location.reload();
+    };
+
+    // --- HUBUNGKAN REAL-TIME ENGINE ---
+    function showMainDashboard() {
+      document.getElementById('login-screen').classList.add('hidden');
+      document.getElementById('app-screen').classList.remove('hidden');
+
+      document.getElementById('my-name-display').innerText = currentUser.name;
+      document.getElementById('my-number-display').innerText = currentUser.number;
+      document.getElementById('my-avatar-img').src = currentUser.avatar;
+
+      // Sinkronisasi data user global
+      onValue(ref(db, 'users'), (snap) => {
+        if(snap.exists()) {
+          loadedAllUsers = snap.val();
+          buildChatsListUI();
+        }
+      });
+
+      // REACTIVE RENDER TANPA DUPLIKASI (Mencegah Bug Rendering Ganda)
+      onValue(ref(db, `user_chats/${currentUser.number}`), (snapshot) => {
+        buildChatsListUI();
+        
+        if (activeChat && activeChat.type === 'chat') {
+          const container = document.getElementById('messages-container');
+          container.innerHTML = '';
+          
+          if (snapshot.exists()) {
+            const all = Object.values(snapshot.val());
+            const filtered = all.filter(m => (m.from === currentUser.number && m.to === activeChat.id) || (m.from === activeChat.id && m.to === currentUser.number));
+            filtered.sort((a,b) => a.timestamp - b.timestamp);
+            filtered.forEach(m => appendMessageUI(m));
+          }
+        }
+      });
+
+      // Pemicu Notifikasi Masuk
+      onChildAdded(ref(db, `user_chats/${currentUser.number}`), (snapshot) => {
+        const msg = snapshot.val();
+        if (msg.from !== currentUser.number && msg.timestamp > appLoadedTime) {
+          if (!activeChat || activeChat.id !== msg.from) {
+            triggerDesktopNotification(msg);
+          }
+        }
+      });
+
+      // Stream Groups
+      onValue(ref(db, 'groups'), (snap) => {
+        buildGroupsListUI();
+        if (activeChat && activeChat.type === 'group') {
+          loadGroupChatHistory();
+        }
+      });
+
+      lucide.createIcons();
+    }
+
+    // --- PROSES UNGGAH FILE & PREVIEW GAMBAR ---
+    window.handleFileUpload = (e) => {
+      const file = e.target.files[0];
+      if(!file) return;
+
+      if(file.size > 2 * 1024 * 1024) return showToast("File maksimal 2MB!");
+
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const fileBase64 = event.target.result;
+        const timestamp = Date.now();
+
+        const msgData = {
+          id: 'msg-file-' + timestamp,
+          from: currentUser.number,
+          to: activeChat.id,
+          text: `Mengirim File: ${file.name}`,
+          fileData: fileBase64,
+          fileType: file.type,
+          fileName: file.name,
+          timestamp: timestamp,
+          type: activeChat.type
+        };
+
+        if (activeChat.type === 'chat') {
+          const newKey = push(ref(db, `user_chats/${activeChat.id}`)).key;
+          await set(ref(db, `user_chats/${activeChat.id}/${newKey}`), msgData);
+          await set(ref(db, `user_chats/${currentUser.number}/${newKey}`), msgData);
+        } else {
+          const newKey = push(ref(db, `group_chats/${activeChat.id}`)).key;
+          await set(ref(db, `group_chats/${activeChat.id}/${newKey}`), msgData);
+        }
+        showToast("File dikirim!");
+      };
+      reader.readAsDataURL(file);
+    };
+
+    window.sendMessage = async () => {
+      const input = document.getElementById('message-input');
+      const text = input.value.trim();
+      if (!text || !activeChat) return;
+
+      const timestamp = Date.now();
+      const msgData = {
+        id: 'msg-' + timestamp,
+        from: currentUser.number,
+        to: activeChat.id,
+        text: text,
+        timestamp: timestamp,
+        type: activeChat.type
+      };
+
+      if (activeChat.type === 'chat') {
+        const newKey = push(ref(db, `user_chats/${activeChat.id}`)).key;
+        await set(ref(db, `user_chats/${activeChat.id}/${newKey}`), msgData);
+        await set(ref(db, `user_chats/${currentUser.number}/${newKey}`), msgData);
+      } else {
+        const newKey = push(ref(db, `group_chats/${activeChat.id}`)).key;
+        await set(ref(db, `group_chats/${activeChat.id}/${newKey}`), msgData);
+      }
+
+      input.value = '';
+      input.focus();
+    };
+
+    window.handleKeySend = (e) => {
+      if(e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    };
+
+    // --- INPUT EMOJI PICKER DESKTOP ---
+    window.toggleEmojiPicker = () => {
+      const picker = document.getElementById('emoji-picker');
+      picker.classList.toggle('hidden');
+    };
+
+    window.insertEmoji = (emoji) => {
+      const input = document.getElementById('message-input');
+      input.value += emoji;
+      input.focus();
+      document.getElementById('emoji-picker').classList.add('hidden');
+    };
+
+    // --- BALON CHAT RENDER (DENGAN FILE & IMAGE PREVIEW) ---
+    function appendMessageUI(msg) {
+      const container = document.getElementById('messages-container');
+      const isMe = msg.from === currentUser.number;
+      
+      let senderNameDisplay = "";
+      if (activeChat.type === 'group' && !isMe) {
+        const sInfo = loadedAllUsers[msg.from] || { name: msg.from };
+        senderNameDisplay = mySavedContacts[msg.from] || sInfo.name;
+      }
+
+      const time = new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+
+      let contentHTML = `<div class="text-[14px] pb-[10px] pr-10 whitespace-pre-wrap leading-[19px] inline-block align-top break-words">${msg.text}</div>`;
+      
+      // Deteksi jika pesan mengandung berkas lampiran
+      if (msg.fileData) {
+        if (msg.fileType && msg.fileType.startsWith('image/')) {
+          contentHTML = `
+            <div class="mb-2 max-w-[320px] rounded overflow-hidden shadow-md">
+              <img src="${msg.fileData}" alt="Uploaded Image" class="w-full h-auto object-contain cursor-pointer transition-transform hover:scale-[1.01]" onclick="window.open('${msg.fileData}')">
+            </div>
+            <p class="text-[11px] text-gray-400 italic mb-1">${msg.fileName}</p>
+          `;
+        } else {
+          contentHTML = `
+            <div class="flex items-center gap-3 bg-black/20 p-2.5 rounded-lg mb-2">
+              <i data-lucide="file-text" class="w-8 h-8 text-[#00a884]"></i>
+              <div class="min-w-0 text-left">
+                <p class="text-xs text-white truncate max-w-[180px] font-medium">${msg.fileName}</p>
+                <a href="${msg.fileData}" download="${msg.fileName}" class="text-[11px] text-[#00a884] font-bold hover:underline">Download file</a>
+              </div>
+            </div>
+          `;
+        }
+      }
+
+      const html = `
+        <div class="flex flex-col ${isMe ? 'items-end' : 'items-start'} mb-1.5 animate-fade-in">
+          <div class="max-w-[70%] rounded-lg px-2.5 py-1.5 relative shadow-sm ${isMe ? 'bg-[#005c4b] text-[#e9edef] rounded-tr-[3px]' : 'bg-[#202c33] text-[#e9edef] rounded-tl-[3px]'}">
+            ${activeChat.type === 'group' && !isMe ? `<span class="block text-[12px] font-bold text-[#f08a5d] mb-1">${senderNameDisplay}</span>` : ''}
+            ${contentHTML}
+            <span class="absolute bottom-1 right-2 text-[10px] text-gray-400/80 font-medium whitespace-nowrap">${time}</span>
+          </div>
+        </div>
+      `;
+      container.insertAdjacentHTML('beforeend', html);
+      container.scrollTop = container.scrollHeight;
+      lucide.createIcons();
+    }
+
+    function loadGroupChatHistory() {
+      if(!activeChat || activeChat.type !== 'group') return;
+      get(ref(db, `groups/${activeChat.id}`)).then((gSnap) => {
+        if(!gSnap.exists()) return;
+        const g = gSnap.val();
+        document.getElementById('active-chat-title').innerText = g.name;
+        document.getElementById('active-chat-subtitle').innerText = `Grup • ${g.members ? g.members.length : 0} Anggota`;
+        
+        const container = document.getElementById('messages-container');
+        onValue(ref(db, `group_chats/${activeChat.id}`), (mSnap) => {
+          if(activeChat && activeChat.type === 'group' && activeChat.id === g.code) {
+            container.innerHTML = '';
+            if(mSnap.exists()) {
+              const msgs = Object.values(mSnap.val()).sort((a,b) => a.timestamp - b.timestamp);
+              msgs.forEach(m => appendMessageUI(m));
+            }
+          }
+        });
+      });
+    }
+
+    // --- UI RENDER LIST LEFT SIDEBAR ---
+    function buildChatsListUI() {
+      get(ref(db, `user_chats/${currentUser.number}`)).then((snap) => {
+        const list = document.getElementById('chats-list');
+        list.innerHTML = '';
+        if (!snap.exists()) {
+          list.innerHTML = `<div class="p-8 text-center text-xs text-gray-500">Gunakan + di atas untuk chat teman.</div>`;
+          return;
+        }
+
+        const allMsgs = Object.values(snap.val());
+        const conversations = {};
+
+        allMsgs.forEach(m => {
+          const partner = m.from === currentUser.number ? m.to : m.from;
+          if (!conversations[partner] || conversations[partner].timestamp < m.timestamp) {
+            conversations[partner] = m;
+          }
+        });
+
+        Object.keys(conversations).forEach(partnerNum => {
+          const lastMsg = conversations[partnerNum];
+          const uInfo = loadedAllUsers[partnerNum] || { name: partnerNum, avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80' };
+          const displayName = mySavedContacts[partnerNum] || uInfo.name;
+          const isSelected = activeChat && activeChat.id === partnerNum;
+
+          const html = `
+            <div onclick="openChatRoom('chat', '${partnerNum}')" class="flex items-center gap-3 p-3 cursor-pointer transition-all ${isSelected ? 'bg-[#2a3942]' : 'hover:bg-[#202c33]'}" >
+              <img src="${uInfo.avatar}" class="w-12 h-12 rounded-full object-cover">
+              <div class="flex-1 min-w-0">
+                <div class="flex justify-between items-baseline mb-0.5">
+                  <h4 class="text-sm font-medium truncate">${displayName}</h4>
+                  <span class="text-[10px] text-gray-500">${new Date(lastMsg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                </div>
+                <p class="text-xs text-gray-400 truncate">${lastMsg.text}</p>
+              </div>
+            </div>
+          `;
+          list.insertAdjacentHTML('beforeend', html);
+        });
+      });
+    }
+
+    function buildGroupsListUI() {
+      get(ref(db, 'groups')).then((snap) => {
+        const list = document.getElementById('groups-list');
+        list.innerHTML = '';
+        if(!snap.exists()) return;
+
+        Object.values(snap.val()).forEach(g => {
+          if (g.members && g.members.includes(currentUser.number)) {
+            const isSelected = activeChat && activeChat.id === g.code;
+            const html = `
+              <div onclick="openChatRoom('group', '${g.code}')" class="flex items-center gap-3 p-3 cursor-pointer transition-all ${isSelected ? 'bg-[#2a3942]' : 'hover:bg-[#202c33]'}">
+                <div class="w-11 h-11 rounded-full bg-[#202c33] flex items-center justify-center text-[#00a884]"><i data-lucide="users" class="w-5 h-5"></i></div>
+                <div class="flex-1 min-w-0">
+                  <h4 class="text-sm font-medium truncate">${g.name}</h4>
+                  <p class="text-xs text-gray-400 truncate">Kode: ${g.code}</p>
+                </div>
+              </div>
+            `;
+            list.insertAdjacentHTML('beforeend', html);
+          }
+        });
+        lucide.createIcons();
+      });
+    }
+
+    // --- PANEL MANAGER (KOLOM KETIGA / KANAN) ---
+    window.toggleRightPanel = (panelId) => {
+      const container = document.getElementById('right-panel-container');
+      if (currentRightPanel === panelId && !container.classList.contains('hidden')) {
+        closeRightPanel();
+        return;
+      }
+      currentRightPanel = panelId;
+      document.querySelectorAll('[id^="content-panel-"]').forEach(el => el.classList.add('hidden'));
+      document.getElementById(`content-${panelId}`).classList.remove('hidden');
+      
+      const titles = { 
+        'panel-profile': 'Pengaturan Akun', 
+        'panel-add-contact': 'Mulai Obrolan', 
+        'panel-create-group': 'Grup Baru', 
+        'panel-join-group': 'Gabung Grup', 
+        'panel-group-info': 'Info Grup' 
+      };
+      document.getElementById('right-panel-title').innerText = titles[panelId] || 'Panel';
+
+      if (panelId === 'panel-profile') {
+        document.getElementById('profile-edit-avatar').src = currentUser.avatar;
+        document.getElementById('profile-name-input').value = currentUser.name;
+        document.getElementById('profile-number-input').value = currentUser.number;
+        document.getElementById('profile-desc-input').value = currentUser.desc || '';
+        document.getElementById('profile-password-input').value = currentUser.password || '';
+      }
+      if (panelId === 'panel-group-info') populateGroupInfoPanel();
+
+      container.classList.remove('hidden');
+      setTimeout(() => container.classList.add('panel-right-active'), 10);
+    };
+
+    window.closeRightPanel = () => {
+      const container = document.getElementById('right-panel-container');
+      container.classList.remove('panel-right-active');
+      setTimeout(() => { container.classList.add('hidden'); currentRightPanel = null; }, 250);
+    };
+
+    window.openChatRoom = (type, id) => {
+      activeChat = { type, id };
+      document.getElementById('chat-welcome').classList.add('hidden');
+      
+      const titleEl = document.getElementById('active-chat-title');
+      const subEl = document.getElementById('active-chat-subtitle');
+      const imgEl = document.getElementById('active-chat-avatar');
+      const placeholderEl = document.getElementById('active-chat-placeholder');
+      const btnInfo = document.getElementById('btn-group-info');
+
+      if (type === 'chat') {
+        imgEl.classList.remove('hidden');
+        placeholderEl.classList.add('hidden');
+        btnInfo.classList.add('hidden');
+        if(currentRightPanel === 'panel-group-info') closeRightPanel();
+
+        const u = loadedAllUsers[id] || { name: id, avatar: '', desc: '' };
+        titleEl.innerText = mySavedContacts[id] || u.name;
+        subEl.innerText = `${id} ${u.desc ? '• ' + u.desc : ''}`;
+        imgEl.src = u.avatar;
+      } else {
+        imgEl.classList.add('hidden');
+        placeholderEl.classList.remove('hidden');
+        btnInfo.classList.remove('hidden');
+        loadGroupChatHistory();
+      }
+      document.getElementById('message-input').focus();
+    };
+
+    // --- GRUP & ANGGOTA (DESKTOP) ---
+    async function populateGroupInfoPanel() {
+      const snap = await get(ref(db, `groups/${activeChat.id}`));
+      const g = snap.val();
+      document.getElementById('info-group-name').innerText = g.name;
+      document.getElementById('info-group-code').innerText = g.code;
+      document.getElementById('info-group-desc').innerText = g.desc || 'Tanpa deskripsi.';
+
+      const isAdmin = g.admins && g.admins.includes(currentUser.number);
+      const addSection = document.getElementById('add-member-section');
+
+      if(isAdmin) {
+        addSection.classList.remove('hidden');
+        const select = document.getElementById('select-add-member');
+        select.innerHTML = '';
+        Object.keys(mySavedContacts).forEach(num => {
+          if(!g.members.includes(num)) {
+            select.insertAdjacentHTML('beforeend', `<option value="${num}">${mySavedContacts[num]} (${num})</option>`);
+          }
+        });
+      } else {
+        addSection.classList.add('hidden');
+      }
+
+      const listContainer = document.getElementById('group-members-list');
+      listContainer.innerHTML = '';
+      g.members.forEach(mNum => {
+        const u = loadedAllUsers[mNum] || { name: mNum, avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=50&q=80' };
+        const isMAdmin = g.admins && g.admins.includes(mNum);
+        const name = mNum === currentUser.number ? "Anda" : (mySavedContacts[mNum] || u.name);
+
+        const html = `
+          <div class="flex justify-between items-center py-2.5 text-xs">
+            <div class="flex items-center gap-2">
+              <img src="${u.avatar}" class="w-8 h-8 rounded-full object-cover">
+              <div>
+                <span class="font-bold block">${name}</span>
+                ${isMAdmin ? `<span class="text-[9px] text-[#00a884] uppercase font-bold tracking-wider">Admin</span>` : ''}
+              </div>
+            </div>
+            ${isAdmin && !isMAdmin ? `<button onclick="promoteAdmin('${mNum}')" class="bg-[#202c33] text-[#00a884] py-1 px-2.5 rounded hover:bg-[#2a3942]">Jadikan Admin</button>` : ''}
+          </div>
+        `;
+        listContainer.insertAdjacentHTML('beforeend', html);
+      });
+    }
+
+    window.addSelectedMemberToGroup = async () => {
+      const num = document.getElementById('select-add-member').value;
+      if(!num) return;
+      const snap = await get(ref(db, `groups/${activeChat.id}`));
+      const g = snap.val();
+      g.members.push(num);
+      await update(ref(db, `groups/${activeChat.id}`), { members: g.members });
+      populateGroupInfoPanel();
+    };
+
+    window.promoteAdmin = async (targetNum) => {
+      const snap = await get(ref(db, `groups/${activeChat.id}`));
+      const g = snap.val();
+      if(!g.admins) g.admins = [];
+      g.admins.push(targetNum);
+      await update(ref(db, `groups/${activeChat.id}`), { admins: g.admins });
+      populateGroupInfoPanel();
+    };
+
+    window.addContactAndOpen = () => {
+      const num = document.getElementById('contact-number-input').value.trim().toUpperCase();
+      const alias = document.getElementById('contact-name-input').value.trim();
+      if(!num.startsWith('YN-')) return showToast("Format nomor salah!");
+
+      if(alias) {
+        mySavedContacts[num] = alias;
+        localStorage.setItem('wersapp_desktop_contacts', JSON.stringify(mySavedContacts));
+      }
+      closeRightPanel();
+      openChatRoom('chat', num);
+    };
+
+    window.createNewGroup = async () => {
+      const name = document.getElementById('group-name-input').value.trim();
+      const desc = document.getElementById('group-desc-input').value.trim();
+      if(!name) return;
+
+      const code = 'GRP-' + Math.floor(1000 + Math.random() * 9000);
+      const groupData = { code, name, desc, createdBy: currentUser.number, members: [currentUser.number], admins: [currentUser.number] };
+      await set(ref(db, `groups/${code}`), groupData);
+      
+      closeRightPanel();
+      switchTab('groups');
+      openChatRoom('group', code);
+    };
+
+    window.joinGroupWithCode = async () => {
+      const code = document.getElementById('join-group-code').value.trim().toUpperCase();
+      const snap = await get(ref(db, `groups/${code}`));
+      if(!snap.exists()) return showToast("Grup tidak ditemukan!");
+
+      const g = snap.val();
+      if(g.members.includes(currentUser.number)) return showToast("Sudah bergabung!");
+
+      g.members.push(currentUser.number);
+      await update(ref(db, `groups/${code}`), { members: g.members });
+      closeRightPanel();
+      switchTab('groups');
+      openChatRoom('group', code);
+    };
+
+    window.uploadAvatarLocal = (e) => {
+      const file = e.target.files[0];
+      if(!file) return;
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        document.getElementById('profile-edit-avatar').src = event.target.result;
+        currentUser.avatar = event.target.result;
+      };
+      reader.readAsDataURL(file);
+    };
+
+    window.saveProfile = async () => {
+      const name = document.getElementById('profile-name-input').value.trim();
+      const desc = document.getElementById('profile-desc-input').value.trim();
+      const pass = document.getElementById('profile-password-input').value.trim();
+
+      if(!name) return showToast("Nama tidak boleh kosong!");
+
+      currentUser.name = name;
+      currentUser.desc = desc;
+      currentUser.password = pass;
+
+      await update(ref(db, `users/${currentUser.number}`), currentUser);
+      showMainDashboard();
+      closeRightPanel();
+      showToast("Profil Disimpan!");
+    };
+
+    // --- NOTIFIKASI DESKTOP BANNER ---
+    function triggerDesktopNotification(msg) {
+      const senderInfo = loadedAllUsers[msg.from] || { name: msg.from };
+      const aliasName = mySavedContacts[msg.from] || senderInfo.name;
+      const notifId = 'notif-' + msg.timestamp;
+
+      const html = `
+        <div id="${notifId}" class="pointer-events-auto bg-[#202c33] border-l-4 border-[#00a884] text-white p-3.5 rounded-lg shadow-xl w-80 space-y-2">
+          <div class="flex justify-between items-center">
+            <span class="font-bold text-xs text-[#00a884]">${aliasName}</span>
+            <button onclick="document.getElementById('${notifId}').remove()" class="text-gray-400 text-xs">✕</button>
+          </div>
+          <p class="text-xs text-gray-300 truncate">${msg.text}</p>
+          <div class="flex gap-2">
+            <input type="text" id="reply-in-${notifId}" placeholder="Balas..." class="flex-1 bg-[#2a3942] text-xs rounded px-2 py-1.5 focus:outline-none">
+            <button id="btn-reply-${notifId}" class="bg-[#00a884] text-[#111b21] font-bold text-xs px-3 rounded">Kirim</button>
+          </div>
+        </div>
+      `;
+      document.getElementById('toast-container').insertAdjacentHTML('beforeend', html);
+
+      document.getElementById(`btn-reply-${notifId}`).onclick = async () => {
+        const text = document.getElementById(`reply-in-${notifId}`).value.trim();
+        if(!text) return;
+        const msgData = { id: 'msg-' + Date.now(), from: currentUser.number, to: msg.from, text, timestamp: Date.now(), type: 'chat' };
+        
+        const newKey = push(ref(db, `user_chats/${msg.from}`)).key;
+        await set(ref(db, `user_chats/${msg.from}/${newKey}`), msgData);
+        await set(ref(db, `user_chats/${currentUser.number}/${newKey}`), msgData);
+
+        document.getElementById(notifId).remove();
+        showToast("Balasan terkirim!");
+      };
+      setTimeout(() => { if(document.getElementById(notifId)) document.getElementById(notifId).remove(); }, 8000);
+    }
+
+    // --- TAB SWITCHER & FILTER OBROLAN KIRI ---
+    window.switchTab = (tab) => {
+      currentTab = tab;
+      const btnC = document.getElementById('btn-tab-chats');
+      const btnG = document.getElementById('btn-tab-groups');
+      const iconC = document.getElementById('icon-tab-chats');
+      const iconG = document.getElementById('icon-tab-groups');
+      
+      if(tab === 'chats') {
+        document.getElementById('tab-chats-content').classList.remove('hidden');
+        document.getElementById('tab-groups-content').classList.add('hidden');
+        btnC.classList.add('bg-[#2a3942]'); btnG.classList.remove('bg-[#2a3942]');
+        iconC.classList.add('text-[#00a884]'); iconG.classList.remove('text-[#00a884]');
+      } else {
+        document.getElementById('tab-chats-content').classList.add('hidden');
+        document.getElementById('tab-groups-content').classList.remove('hidden');
+        btnG.classList.add('bg-[#2a3942]'); btnC.classList.remove('bg-[#2a3942]');
+        iconG.classList.add('text-[#00a884]'); iconC.classList.remove('text-[#00a884]');
+      }
+    };
+
+    window.filterLists = () => {
+      const q = document.getElementById('search-input').value.toLowerCase().trim();
+      const id = currentTab === 'chats' ? 'chats-list' : 'groups-list';
+      Array.from(document.getElementById(id).children).forEach(item => {
+        item.style.display = item.innerText.toLowerCase().includes(q) ? 'flex' : 'none';
+      });
+    };
+
+    function showToast(msg) {
+      const t = document.createElement('div');
+      t.className = "bg-[#00a884] text-[#111b21] px-5 py-2.5 rounded-lg shadow-lg text-xs font-bold pointer-events-auto text-center";
+      t.innerText = msg;
+      document.getElementById('toast-container').appendChild(t);
+      setTimeout(() => t.remove(), 3500);
+    }
+  </script>
+</body>
+</html>
