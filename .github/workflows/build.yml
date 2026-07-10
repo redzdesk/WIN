@@ -1,0 +1,94 @@
+name: Build Electron EXE
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest   # Gunakan Windows untuk menghasilkan .exe
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Buat package.json secara otomatis jika tidak ada
+      - name: Create package.json and main.js
+        run: |
+          # Buat package.json dengan konfigurasi electron-builder
+          @"
+          {
+            "name": "WersApp",
+            "version": "1.0.0",
+            "description": "Cloning WhatsApp",
+            "main": "main.js",
+            "scripts": {
+              "build": "electron-builder --win --x64"
+            },
+            "devDependencies": {
+              "electron": "^28.0.0",
+              "electron-builder": "^24.9.1"
+            },
+            "build": {
+              "appId": "com.wersapp",
+              "files": [
+                "index.html",
+                "logo.png",
+                "main.js"
+              ],
+              "win": {
+                "target": "nsis",
+                "icon": "logo.png"
+              },
+              "directories": {
+                "output": "release"
+              }
+            }
+          }
+          "@ > package.json
+
+          # Buat main.js sebagai entry point Electron
+          @"
+          const { app, BrowserWindow } = require('electron');
+          const path = require('path');
+
+          function createWindow() {
+            const win = new BrowserWindow({
+              width: 800,
+              height: 600,
+              webPreferences: {
+                nodeIntegration: false,
+                contextIsolation: true
+              }
+            });
+            win.loadFile('index.html');
+          }
+
+          app.whenReady().then(createWindow);
+
+          app.on('window-all-closed', () => {
+            if (process.platform !== 'darwin') app.quit();
+          });
+          "@ > main.js
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build executable
+        run: npm run build
+
+      # Upload hasil build sebagai artefak (Zip berisi .exe)
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-app-windows
+          path: release/*.exe    # Sesuaikan dengan output electron-builder
+          if-no-files-found: error
