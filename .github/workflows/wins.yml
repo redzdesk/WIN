@@ -5,7 +5,7 @@ on:
 
 jobs:
   winser-2022: # Nama job diubah menjadi redz-win22
-    runs-on: windows-2022
+    runs-on: windows-2025
     timeout-minutes: 3600
 
     steps:
@@ -35,13 +35,13 @@ jobs:
           $password = "RedzSG123"
           $securePass = ConvertTo-SecureString $password -AsPlainText -Force
           
-          New-LocalUser -Name "Redzz" -Password $securePass -AccountNeverExpires -Description "Tailscale RDP User"
-          Add-LocalGroupMember -Group "Administrators" -Member "Redzz"
-          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "Redzz"
+          New-LocalUser -Name "Administrator" -Password $securePass -AccountNeverExpires -Description "Tailscale RDP User"
+          Add-LocalGroupMember -Group "Administrators" -Member "Administrator"
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "Administrator"
           
           "RDP_PASS=$password" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           
-          if (-not (Get-LocalUser -Name "Redzz")) {
+          if (-not (Get-LocalUser -Name "Administrator")) {
               Write-Error "Gagal membuat user baru."
               exit 1
           }
@@ -212,12 +212,12 @@ jobs:
           $pass = $env:RDP_PASS
           
           Write-Host "`n┌────────────────────────────────────────┐"
-          Write-Host "│       KONEKSI RDP BERHASIL AKTIF       │"
-          Write-Host "├────────────────────────────────────────┤"
+          Write-Host "│       KONEKSI RDP BERHASIL AKTIF                 │"
+          Write-Host "├──────────────────────────────────────────┤"
           Write-Host "│ IP Address : $ip"
-          Write-Host "│ Username   : Redzz                     │"
-          Write-Host "│ Password   : $pass                 │"
-          Write-Host "└────────────────────────────────────────┘"
+          Write-Host "│ Username   : Administrator                       │"
+          Write-Host "│ Password   : $pass                               │"
+          Write-Host "└──────────────────────────────────────────┘"
           Write-Host "Gunakan aplikasi Remote Desktop (RDP) di PC Anda."
           Write-Host "Tekan 'Cancel' pada Workflow GitHub untuk berhenti.`n"
           
