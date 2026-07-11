@@ -1,79 +1,173 @@
-name: Windows Server 2025 RDP
+name: Windows Server 2022 RDP
 
 on:
   workflow_dispatch:
 
 jobs:
-  winser-2025: # Nama job diubah menjadi redz-win25
-    runs-on: windows-2025  # Gunakan windows-2025 jika tersedia, fallback ke windows-latest bila tidak
+  winser-2022:
+    runs-on: windows-2022
     timeout-minutes: 3600
 
     steps:
+      # ============================================================
+      # 1. KONFIGURASI DASAR RDP + THEMES
+      # ============================================================
       - name: Configure Core RDP Settings
         run: |
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1 -Force
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SecurityLayer" -Value 2 -Force
 
-          # 1. AKTIFKAN LAYANAN THEMES (Wajib untuk Windows Server agar mendukung Wallpaper)
           Set-Service -Name Themes -StartupType Automatic -ErrorAction SilentlyContinue
           Start-Service -Name Themes -ErrorAction SilentlyContinue
 
-          # 2. BEBASKAN PEMBLOKIRAN WALLPAPER PADA SESI RDP (System-wide)
           $tsPoliciesPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
           if (!(Test-Path $tsPoliciesPath)) { New-Item -Path $tsPoliciesPath -Force }
           Set-ItemProperty -Path $tsPoliciesPath -Name "fNoRemoteDesktopWallpaper" -Value 0 -Force
           Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "fNoRemoteDesktopWallpaper" -Value 0 -Force
-
-          # 3. MATIKAN KEBIJAKAN YANG MENGHALANG WALLPAPER DI GROUP POLICY (jika ada)
-          $gpPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop"
-          if (Test-Path $gpPath) {
-              Set-ItemProperty -Path $gpPath -Name "NoChangingWallpaper" -Value 0 -Force
-          }
 
           Remove-NetFirewallRule -DisplayName "RDP-Tailscale" -ErrorAction SilentlyContinue
           New-NetFirewallRule -DisplayName "RDP-Tailscale" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 3389
 
           Restart-Service -Name TermService -Force
 
+      # ============================================================
+      # 2. INSTALL VIRTUAL DISPLAY DRIVER (GPU EMULASI)
+      # ============================================================
+      - name: Install Virtual Display Driver (IddSampleDriver)
+        run: |
+          Write-Host "=========================================================="
+          Write-Host "  INSTALLING VIRTUAL DISPLAY DRIVER (IddSampleDriver)"
+          Write-Host "=========================================================="
+
+          # Download IddSampleDriver dari ge9/IddSampleDriver
+          $driverUrl = "https://github.com/ge9/IddSampleDriver/releases/download/v0.0.1/IddSampleDriver.zip"
+          $driverZip = "$env:TEMP\IddSampleDriver.zip"
+          $extractPath = "$env:TEMP\IddSampleDriver"
+
+          Invoke-WebRequest -Uri $driverUrl -OutFile $driverZip -UseBasicParsing
+          Expand-Archive -Path $driverZip -DestinationPath $extractPath -Force
+
+          Write-Host "[*] Installing driver using pnputil..."
+          $infFile = Get-ChildItem -Path $extractPath -Recurse -Filter "*.inf" | Select-Object -First 1
+          if ($infFile) {
+              pnputil /add-driver $infFile.FullName /install
+              Write-Host "[+] Virtual Display Driver installed successfully!"
+          } else {
+              Write-Error "[!] No .inf file found!"
+              exit 1
+          }
+
+          # Buat konfigurasi display dummy (1920x1080)
+          $configDir = "C:\ProgramData\IddSampleDriver"
+          New-Item -ItemType Directory -Path $configDir -Force -ErrorAction SilentlyContinue
+          $configContent = @"
+          <IddSampleDriver>
+              <Option name="Debug" value="0"/>
+              <Option name="MonitorCount" value="1"/>
+              <Option name="Width" value="1920"/>
+              <Option name="Height" value="1080"/>
+          </IddSampleDriver>
+"@
+          $configContent | Out-File -FilePath "$configDir\options.txt" -Encoding utf8 -Force
+
+          Write-Host "[*] Restarting display driver (Ctrl+Shift+Win+B simulation)..."
+          # Simulasi restart graphics driver
+          $code = @'
+          using System;
+          using System.Runtime.InteropServices;
+          public class Display {
+              [DllImport("user32.dll", SetLastError = true)]
+              public static extern bool SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+              public static void RestartGraphics() {
+                  IntPtr hwnd = new IntPtr(0xFFFF); // HWND_BROADCAST
+                  SendMessage(hwnd, 0x1A, (IntPtr)0, (IntPtr)0); // WM_SETTINGCHANGE
+              }
+          }
+'@
+          Add-Type -TypeDefinition $code -ErrorAction SilentlyContinue
+          [Display]::RestartGraphics()
+
+          Write-Host "=========================================================="
+          Write-Host "  [+] VIRTUAL DISPLAY DRIVER INSTALLED!                   "
+          Write-Host "  [*] GPU: IddSampleDriver (Virtual Display Adapter)      "
+          Write-Host "=========================================================="
+
+      # ============================================================
+      # 3. INSTALL VIRTUAL AUDIO DRIVER (VB-CABLE)
+      # ============================================================
+      - name: Install Virtual Audio Driver (VB-CABLE)
+        run: |
+          Write-Host "=========================================================="
+          Write-Host "  INSTALLING VIRTUAL AUDIO DRIVER (VB-CABLE)"
+          Write-Host "=========================================================="
+
+          # Download VB-CABLE (gratis)
+          $audioUrl = "https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack43.zip"
+          $audioZip = "$env:TEMP\VBCABLE.zip"
+          $extractPath = "$env:TEMP\VBCABLE"
+
+          Invoke-WebRequest -Uri $audioUrl -OutFile $audioZip -UseBasicParsing
+          Expand-Archive -Path $audioZip -DestinationPath $extractPath -Force
+
+          Write-Host "[*] Installing VB-CABLE silently..."
+          $installer = Get-ChildItem -Path $extractPath -Recurse -Filter "*.exe" | Where-Object { $_.Name -like "*CABLE*" } | Select-Object -First 1
+          if ($installer) {
+              Start-Process -FilePath $installer.FullName -ArgumentList "/S" -Wait
+              Write-Host "[+] VB-CABLE installed successfully!"
+          } else {
+              Write-Error "[!] Audio driver installer not found!"
+              exit 1
+          }
+
+          # Enable audio service
+          Set-Service -Name "Audiosrv" -StartupType Automatic -ErrorAction SilentlyContinue
+          Start-Service -Name "Audiosrv" -ErrorAction SilentlyContinue
+
+          Write-Host "=========================================================="
+          Write-Host "  [+] VIRTUAL AUDIO DRIVER INSTALLED!                    "
+          Write-Host "  [*] Audio Device: CABLE Input / CABLE Output           "
+          Write-Host "=========================================================="
+
+      # ============================================================
+      # 4. BUAT USER RDP + CREDENTIALS
+      # ============================================================
       - name: Create RDP User with Custom Credentials
         run: |
           $password = "RedzSG123"
           $securePass = ConvertTo-SecureString $password -AsPlainText -Force
           
-          New-LocalUser -Name "Redzz" -Password $securePass -AccountNeverExpires -Description "Tailscale RDP User"
-          Add-LocalGroupMember -Group "Administrators" -Member "Redzz"
-          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "Redzz"
+          New-LocalUser -Name "Administrator" -Password $securePass -AccountNeverExpires -Description "Tailscale RDP User"
+          Add-LocalGroupMember -Group "Administrators" -Member "Administrator"
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "Administrator"
           
           "RDP_PASS=$password" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           
-          if (-not (Get-LocalUser -Name "Redzz")) {
+          if (-not (Get-LocalUser -Name "Administrator")) {
               Write-Error "Gagal membuat user baru."
               exit 1
           }
 
+      # ============================================================
+      # 5. SET WALLPAPER & LOCK SCREEN
+      # ============================================================
       - name: Set Custom Wallpaper, Lock Screen, and Profile Picture
         run: |
           $imageUrl = "https://images5.alphacoders.com/129/thumb-1920-1294333.png"
           $imagePath = "C:\Windows\Web\Wallpaper\custom_image.png"
           
-          # Unduh Gambar Utama
           Invoke-WebRequest -Uri $imageUrl -OutFile $imagePath -UseBasicParsing
           
-          # Set Desktop Wallpaper via Registry Policy (Global)
           $policyPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
           if (!(Test-Path $policyPath)) { New-Item -Path $policyPath -Force }
           Set-ItemProperty -Path $policyPath -Name "Wallpaper" -Value $imagePath -Force
           Set-ItemProperty -Path $policyPath -Name "WallpaperStyle" -Value "2" -Force
           
-          # Set Lock Screen via Registry Policy
           $persPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Personalization"
           if (!(Test-Path $persPath)) { New-Item -Path $persPath -Force }
           Set-ItemProperty -Path $persPath -Name "LockScreenImage" -Value $imagePath -Force
           
-          # Set User Profile Picture untuk Redzz
           $userPicDir = "C:\ProgramData\Microsoft\User Account Pictures"
-          if (!(Test-Path $userPicDir)) { New-Item -Path $userPicDir -ItemType Directory -Force }
           Copy-Item -Path $imagePath -Destination "$userPicDir\user.png" -Force
           Copy-Item -Path $imagePath -Destination "$userPicDir\user.jpg" -Force
           Copy-Item -Path $imagePath -Destination "$userPicDir\user.bmp" -Force
@@ -82,25 +176,19 @@ jobs:
           Copy-Item -Path $imagePath -Destination "$userPicDir\user-48.png" -Force
           Copy-Item -Path $imagePath -Destination "$userPicDir\user-192.png" -Force
 
-      - name: Create Logon Startup Script for Live Wallpaper and Desktop Cleanup
+      # ============================================================
+      # 6. LOGON STARTUP SCRIPT
+      # ============================================================
+      - name: Create Logon Startup Script
         run: |
-          # Skrip sakti ini otomatis terpicu secara LIVE di dalam akun Redzz sewaktu Anda login RDP
           $scriptContent = @'
-          Start-Sleep -Seconds 5
+          Start-Sleep -Seconds 3
           $imagePath = "C:\Windows\Web\Wallpaper\custom_image.png"
           
-          # Pasang langsung ke Registry Current User
           Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name "Wallpaper" -Value $imagePath -Force
           Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name "WallpaperStyle" -Value "2" -Force
           Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name "TileWallpaper" -Value "0" -Force
           
-          # Tambahan: pastikan tidak ada kebijakan yang menghalangi
-          $policyPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop"
-          if (Test-Path $policyPath) {
-              Set-ItemProperty -Path $policyPath -Name "NoChangingWallpaper" -Value 0 -Force
-          }
-          
-          # Panggil Win32 API agar engine OS memaksa wallpaper berganti secara instan
           $code = @"
           using System;
           using System.Runtime.InteropServices;
@@ -110,12 +198,8 @@ jobs:
           }
           "@
           Add-Type -TypeDefinition $code -ErrorAction SilentlyContinue
-          # Panggil dua kali untuk memastikan
-          [Wallpaper]::SystemParametersInfo(20, 0, $imagePath, 3)
-          Start-Sleep -Milliseconds 500
           [Wallpaper]::SystemParametersInfo(20, 0, $imagePath, 3)
           
-          # MEMBERSIHKAN SHORTCUT DI DESKTOP USER REDZZ SECARA REAL-TIME (Kecuali Chrome & Edge)
           $userDesktop = [Environment]::GetFolderPath("Desktop")
           if (Test-Path $userDesktop) {
               Get-ChildItem -Path $userDesktop -File | Where-Object {
@@ -125,24 +209,18 @@ jobs:
               } | Remove-Item -Force -ErrorAction SilentlyContinue
           }
           
-          # Restart Windows Explorer untuk merefresh layar & memunculkan background baru
           Stop-Process -Name explorer -Force
-          Start-Sleep -Seconds 2
-          # Mulai ulang explorer
-          Start-Process explorer.exe
-          '@
+          Start-Process -FilePath "explorer.exe"
+'@
           
           $scriptPath = "C:\Windows\set_wallpaper.ps1"
           $scriptContent | Out-File -FilePath $scriptPath -Encoding utf8 -Force
           
-          # Daftarkan skrip ke Startup Run Registry (HKLM) agar berjalan otomatis saat login RDP
           Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" -Name "SetCustomWallpaper" -Value "PowerShell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File C:\Windows\set_wallpaper.ps1" -Force
-          
-          # Juga daftarkan ke HKCU untuk user Redzz (dengan memuat registry hive)
-          # Karena kita belum login sebagai Redzz, kita akan membuat skrip yang berjalan saat login dan mengatur registry HKCU secara langsung (sudah ditangani oleh skrip di atas)
-          # Namun untuk memastikan, kita tambahkan juga ke HKCU Run untuk user yang akan login (Redzz) dengan menulis ke registry user tersebut.
-          # Kita bisa menggunakan cara: saat login, skrip HKLM akan berjalan untuk semua user, termasuk Redzz, jadi sudah cukup.
 
+      # ============================================================
+      # 7. CLEAN GLOBAL DESKTOP
+      # ============================================================
       - name: Clean Global Desktop Shortcuts
         run: |
           $desktopPaths = @("C:\Users\Public\Desktop", "C:\Users\Default\Desktop")
@@ -156,16 +234,22 @@ jobs:
               }
           }
 
+      # ============================================================
+      # 8. INSTALL TAILSCALE
+      # ============================================================
       - name: Install Tailscale
         run: |
           $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
           $installerPath = "$env:TEMP\tailscale.msi"
           
-          Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath
+          Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath -UseBasicParsing
           Start-Process msiexec.exe -ArgumentList "/i", "`"$installerPath`"", "/quiet", "/norestart" -Wait
           Remove-Item $installerPath -Force
           Start-Sleep -Seconds 5
 
+      # ============================================================
+      # 9. TAILSCALE LOGIN
+      # ============================================================
       - name: Tailscale Web Login Authentication
         run: |
           Write-Host "=========================================================="
@@ -175,8 +259,7 @@ jobs:
           $tsPath = "$env:ProgramFiles\Tailscale\tailscale.exe"
           $processInfo = New-Object System.Diagnostics.ProcessStartInfo
           $processInfo.FileName = $tsPath
-          # Menggunakan github.run_number agar otomatis menjadi winser-2025-1, winser-2025-2, dst.
-          $processInfo.Arguments = "up --hostname=winser-2025-${{ github.run_number }} --accept-dns=false"
+          $processInfo.Arguments = "up --hostname=winser-2022-${{ github.run_number }} --accept-dns=false"
           $processInfo.RedirectStandardOutput = $true
           $processInfo.RedirectStandardError = $true
           $processInfo.UseShellExecute = $false
@@ -221,6 +304,9 @@ jobs:
           "TAILSCALE_IP=$tsIP" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           Write-Host "Login Web Berhasil! Terhubung dengan IP Tailscale: $tsIP"
 
+      # ============================================================
+      # 10. VERIFY RDP
+      # ============================================================
       - name: Verify RDP Accessibility
         run: |
           $ip = $env:TAILSCALE_IP
@@ -230,19 +316,29 @@ jobs:
               exit 1
           }
 
+      # ============================================================
+      # 11. MAINTAIN CONNECTION + INFO LENGKAP
+      # ============================================================
       - name: Maintain Connection
         run: |
           $ip = $env:TAILSCALE_IP
           $pass = $env:RDP_PASS
           
-          Write-Host "`n┌────────────────────────────────────────┐"
-          Write-Host "│       KONEKSI RDP BERHASIL AKTIF       │"
-          Write-Host "├────────────────────────────────────────┤"
-          Write-Host "│ IP Address : $ip"
-          Write-Host "│ Username   : Redzz                     │"
-          Write-Host "│ Password   : $pass                 │"
-          Write-Host "└────────────────────────────────────────┘"
+          Write-Host "`n┌──────────────────────────────────────────────────────────┐"
+          Write-Host "│              KONEKSI RDP BERHASIL AKTIF                   │"
+          Write-Host "├──────────────────────────────────────────────────────────┤"
+          Write-Host "│  IP Address    : $ip"
+          Write-Host "│  Username      : Administrator                                  │"
+          Write-Host "│  Password      : $pass                              │"
+          Write-Host "├──────────────────────────────────────────────────────────┤"
+          Write-Host "│  DRIVER INFO:                                           │"
+          Write-Host "│  GPU Virtual   : IddSampleDriver (Virtual Display)      │"
+          Write-Host "│  Audio Virtual : VB-CABLE (CABLE Input/Output)          │"
+          Write-Host "└──────────────────────────────────────────────────────────┘"
+          Write-Host ""
           Write-Host "Gunakan aplikasi Remote Desktop (RDP) di PC Anda."
+          Write-Host "Alamat: $ip"
+          Write-Host ""
           Write-Host "Tekan 'Cancel' pada Workflow GitHub untuk berhenti.`n"
           
           while ($true) {
