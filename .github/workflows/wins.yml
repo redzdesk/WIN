@@ -74,16 +74,30 @@ jobs:
           Restart-Service -Name TermService -Force
           Write-Host "✅ RDP & Themes siap."
 
-      - name: 👤 Setup Administrator Account for RDP
-        shell: cmd
+      - name: 👤 Create Administrator Account for RDP
+        shell: pwsh
         run: |
-          echo ╔══════════════════════════════════════════════╗
-          echo ║     MENYIAPKAN AKUN ADMINISTRATOR         ║
-          echo ╚══════════════════════════════════════════════╝
-          net user Administrator /active:yes
-          net user Administrator Redz132_
-          net localgroup "Remote Desktop Users" Administrator /add
-          echo ✅ Administrator siap. Password: Redz132_
+          Write-Host "╔══════════════════════════════════════════════╗"
+          Write-Host "║     MEMBUAT AKUN ADMINISTRATOR            ║"
+          Write-Host "╚══════════════════════════════════════════════╝"
+
+          $username = "Administrator"
+          $password = "Redz132_"
+
+          # Hapus dulu jika ada (cleanup), lalu buat baru
+          if (Get-LocalUser -Name $username -ErrorAction SilentlyContinue) {
+              Remove-LocalUser -Name $username -ErrorAction Stop
+          }
+
+          $securePass = ConvertTo-SecureString $password -AsPlainText -Force
+          New-LocalUser -Name $username -Password $securePass -PasswordNeverExpires:$true
+          Add-LocalGroupMember -Group "Administrators" -Member $username
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member $username
+
+          # Set agar tidak expired / selalu aktif
+          Set-LocalUser -Name $username -PasswordNeverExpires:$true -AccountNeverExpires:$true
+
+          Write-Host "✅ Akun $username siap dengan password: $password"
 
       - name: 🎨 Set Custom Wallpaper, Lock Screen, and Profile Picture
         run: |
