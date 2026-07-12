@@ -1,4 +1,4 @@
-name: Windows Server 2022 RDP
+name: Windows Server 2025 RDP
 
 on:
   workflow_dispatch:
@@ -132,6 +132,15 @@ jobs:
               }
           }
 
+     - name: Install virtual display driver
+       shell: pwsh
+       run: |
+         Invoke-WebRequest -Uri "https://www.amyuni.com/downloads/usbmmidd_v2.zip" -OutFile "$env:TEMP\usbmmidd.zip"
+         Expand-Archive -Path "$env:TEMP\usbmmidd.zip" -DestinationPath "$env:TEMP\usbmmidd" -Force
+         cd "$env:TEMP\usbmmidd"
+         .\deviceinstaller64.exe install usbmmidd.inf usbmmidd
+         .\deviceinstaller64.exe enableidd 0
+
       - name: Install Tailscale
         run: |
           $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
@@ -152,7 +161,7 @@ jobs:
           $processInfo = New-Object System.Diagnostics.ProcessStartInfo
           $processInfo.FileName = $tsPath
           # Menggunakan github.run_number agar otomatis menjadi redz-win22-1, redz-win22-2, dst.
-          $processInfo.Arguments = "up --hostname=winser-2022-${{ github.run_number }} --accept-dns=false"
+          $processInfo.Arguments = "up --hostname=winser-2025-${{ github.run_number }} --accept-dns=false"
           $processInfo.RedirectStandardOutput = $true
           $processInfo.RedirectStandardError = $true
           $processInfo.UseShellExecute = $false
