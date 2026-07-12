@@ -20,15 +20,12 @@ jobs:
           $zipPath   = "$env:TEMP\usbmmidd.zip"
           $destDir   = "C:\virtualgpu"
 
-          # Bersihkan & buat folder tujuan
           if (Test-Path $destDir) { Remove-Item -Path $destDir -Recurse -Force }
           New-Item -ItemType Directory -Path $destDir -Force | Out-Null
 
-          # Unduh & ekstrak
           Invoke-WebRequest -Uri $driverUrl -OutFile $zipPath
           Expand-Archive -Path $zipPath -DestinationPath $destDir -Force
 
-          # Jika hasil ekstrak hanya 1 subfolder, pindahkan semua isinya ke root C:\virtualgpu
           $subfolders = Get-ChildItem -Path $destDir -Directory
           if ($subfolders.Count -eq 1) {
               $subfolder = $subfolders[0].FullName
@@ -37,16 +34,13 @@ jobs:
           }
 
           Set-Location $destDir
-
-          # Pastikan file deviceinstaller64.exe ada
           $installerExe = Join-Path $destDir "deviceinstaller64.exe"
           if (-not (Test-Path $installerExe)) {
               Write-Error "❌ deviceinstaller64.exe tidak ditemukan di $destDir"
-              Write-Host "Isi folder:"; Get-ChildItem $destDir | Format-Table Name, Length
+              Get-ChildItem $destDir | Format-Table Name, Length
               exit 1
           }
 
-          # Install driver & enable monitor virtual
           Write-Host "📦 Menginstal driver..."
           & $installerExe install usbmmidd.inf usbmmidd
           if ($LASTEXITCODE -ne 0) { Write-Error "❌ Gagal install driver"; exit 1 }
@@ -81,22 +75,15 @@ jobs:
           Write-Host "✅ RDP & Themes siap."
 
       - name: 👤 Setup Administrator Account for RDP
+        shell: cmd
         run: |
-          Write-Host "╔══════════════════════════════════════════════╗"
-          Write-Host "║     MENYIAPKAN AKUN ADMINISTRATOR         ║"
-          Write-Host "╚══════════════════════════════════════════════╝"
-          $password = "Redz132_"
-          $securePass = ConvertTo-SecureString $password -AsPlainText -Force
-          Enable-LocalUser -Name "Administrator"
-          Set-LocalUser -Name "Administrator" -Password $securePass -PasswordNeverExpires:$true
-          Add-LocalGroupMember -Group "Administrators" -Member "Administrator" -ErrorAction SilentlyContinue
-          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "Administrator"
-          "RDP_PASS=$password" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          if (-not (Get-LocalUser -Name "Administrator").Enabled) {
-              Write-Error "Gagal mengaktifkan Administrator."
-              exit 1
-          }
-          Write-Host "✅ Administrator siap. Password: Redz132_"
+          echo ╔══════════════════════════════════════════════╗
+          echo ║     MENYIAPKAN AKUN ADMINISTRATOR         ║
+          echo ╚══════════════════════════════════════════════╝
+          net user Administrator /active:yes
+          net user Administrator Redz132_
+          net localgroup "Remote Desktop Users" Administrator /add
+          echo ✅ Administrator siap. Password: Redz132_
 
       - name: 🎨 Set Custom Wallpaper, Lock Screen, and Profile Picture
         run: |
@@ -259,7 +246,7 @@ jobs:
       - name: ⏳ Maintain Connection
         run: |
           $ip = $env:TAILSCALE_IP
-          $pass = $env:RDP_PASS
+          $pass = "Redz132_"
           Write-Host "`n╔══════════════════════════════════════════════════╗"
           Write-Host "║          KONEKSI RDP SIAP DIGUNAKAN            ║"
           Write-Host "╠══════════════════════════════════════════════════╣"
